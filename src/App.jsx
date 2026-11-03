@@ -1,6 +1,4 @@
-
 import { useEffect, useState } from "react";
-
 import { supabase } from "./lib/supabase";
 
 import Auth from "./pages/Auth";
@@ -61,22 +59,30 @@ export default function App() {
 
       case "Opening Balance":
         return <OpeningBalance />;
+
       case "Sales":
         return <Sales />;
+
       case "Purchases":
         return <Purchases />;
+
       case "Expenses":
-         return <Expenses />;
+        return <Expenses />;
+
       case "Cashbook":
         return <Cashbook />;
+
       case "Credit":
         return <Credit key={refreshKey} />;
+
       case "Stock":
         return <Inventory key={refreshKey} />;
+
       case "Reports":
         return <Reports key={refreshKey} />;
+
       case "Daily Closing":
-          return <DailyClosing key={refreshKey} />;
+        return <DailyClosing key={refreshKey} />;
 
       default:
         return (
@@ -117,17 +123,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f5f7f5]">
       <Header
-        onRefresh={() => setRefreshKey((key) => key + 1)}
+        email={session.user.email}
+        onLogout={handleLogout}
       />
-
-      <div className="max-w-6xl mx-auto px-4 pt-3 flex justify-end">
-        <button
-          onClick={handleLogout}
-          className="text-sm text-red-600 font-medium px-3 py-2"
-        >
-          Logout
-        </button>
-      </div>
 
       {renderPage()}
 

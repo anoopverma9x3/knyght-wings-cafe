@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   TrendingUp,
@@ -8,9 +9,6 @@ import {
   ArrowDownRight,
   Plus,
   Wallet,
-  Package,
-  BarChart3,
-  Handshake,
   CalendarCheck,
   ArrowRight,
   RefreshCw,
@@ -50,50 +48,54 @@ export default function Dashboard({ onNavigate }) {
     setLoading(true);
     setError("");
 
-    const date = getToday();
+    try {
+      const date = getToday();
 
-    const results = await Promise.all([
-      supabase
-        .from("opening_balances")
-        .select("*")
-        .eq("entry_date", date)
-        .maybeSingle(),
+      const results = await Promise.all([
+        supabase
+          .from("opening_balances")
+          .select("*")
+          .eq("entry_date", date)
+          .maybeSingle(),
 
-      supabase.from("sales").select("*").eq("sale_date", date),
+        supabase.from("sales").select("*").eq("sale_date", date),
 
-      supabase.from("purchases").select("*").eq("purchase_date", date),
+        supabase.from("purchases").select("*").eq("purchase_date", date),
 
-      supabase.from("expenses").select("*").eq("expense_date", date),
+        supabase.from("expenses").select("*").eq("expense_date", date),
 
-      supabase
-        .from("sales")
-        .select("*")
-        .eq("credit_settled", true)
-        .eq("settled_at", date),
+        supabase
+          .from("sales")
+          .select("*")
+          .eq("credit_settled", true)
+          .eq("settled_at", date),
 
-      supabase
-        .from("purchases")
-        .select("*")
-        .eq("credit_settled", true)
-        .eq("settled_at", date),
-    ]);
+        supabase
+          .from("purchases")
+          .select("*")
+          .eq("credit_settled", true)
+          .eq("settled_at", date),
+      ]);
 
-    const failed = results.find((r) => r.error);
+      const failed = results.find((r) => r.error);
 
-    if (failed) {
-      setError(failed.error.message);
-    } else {
-      setData({
-        opening: results[0].data,
-        sales: results[1].data || [],
-        purchases: results[2].data || [],
-        expenses: results[3].data || [],
-        settledSales: results[4].data || [],
-        settledPurchases: results[5].data || [],
-      });
+      if (failed) {
+        setError(failed.error.message);
+      } else {
+        setData({
+          opening: results[0].data,
+          sales: results[1].data || [],
+          purchases: results[2].data || [],
+          expenses: results[3].data || [],
+          settledSales: results[4].data || [],
+          settledPurchases: results[5].data || [],
+        });
+      }
+    } catch (err) {
+      setError(err.message || "Unable to load dashboard.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -185,6 +187,7 @@ export default function Dashboard({ onNavigate }) {
     },
   ];
 
+  // Daily Closing is now included in Quick Actions
   const quickActions = [
     {
       label: "Opening Balance",
@@ -202,24 +205,9 @@ export default function Dashboard({ onNavigate }) {
       icon: Receipt,
     },
     {
-      label: "Inventory",
-      page: "Stock",
-      icon: Package,
-    },
-    {
-      label: "Credit Management",
-      page: "Credit",
-      icon: Handshake,
-    },
-    {
-      label: "Cashbook",
-      page: "Cashbook",
-      icon: Wallet,
-    },
-    {
-      label: "Reports",
-      page: "Reports",
-      icon: BarChart3,
+      label: "Daily Closing",
+      page: "Daily Closing",
+      icon: CalendarCheck,
     },
   ];
 
@@ -228,7 +216,9 @@ export default function Dashboard({ onNavigate }) {
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
           <div className="w-9 h-9 border-4 border-[#173F35] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Loading dashboard...</p>
+          <p className="text-gray-500 text-sm">
+            Loading dashboard...
+          </p>
         </div>
       </div>
     );
@@ -236,6 +226,7 @@ export default function Dashboard({ onNavigate }) {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-6 pb-28">
+
       {/* Welcome and date */}
       <section className="flex justify-between items-center mb-5">
         <div>
@@ -328,7 +319,9 @@ export default function Dashboard({ onNavigate }) {
             Today's Performance
           </h2>
 
-          <span className="text-xs text-gray-400">Live summary</span>
+          <span className="text-xs text-gray-400">
+            Live summary
+          </span>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -390,7 +383,7 @@ export default function Dashboard({ onNavigate }) {
         </div>
       </section>
 
-      {/* Quick actions */}
+      {/* Quick Actions */}
       <section className="mb-7">
         <h2 className="font-bold text-lg text-gray-800 mb-4">
           Quick Actions
@@ -418,30 +411,6 @@ export default function Dashboard({ onNavigate }) {
           })}
         </div>
       </section>
-
-      {/* Daily closing highlight */}
-      <button
-        onClick={() => onNavigate("Daily Closing")}
-        className="w-full flex items-center justify-between gap-3 bg-green-50 border border-green-200 rounded-2xl p-5 mb-7 text-left hover:bg-green-100 transition"
-      >
-        <div className="flex items-center gap-3">
-          <div className="bg-[#173F35] text-white p-3 rounded-xl">
-            <CalendarCheck size={22} />
-          </div>
-
-          <div>
-            <h3 className="font-bold text-[#173F35]">
-              Daily Closing
-            </h3>
-
-            <p className="text-xs text-gray-500 mt-1">
-              Verify and save today's cash and UPI balances
-            </p>
-          </div>
-        </div>
-
-        <ArrowRight size={20} className="text-[#173F35] shrink-0" />
-      </button>
 
       {/* Today's summary */}
       <section className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-5">
