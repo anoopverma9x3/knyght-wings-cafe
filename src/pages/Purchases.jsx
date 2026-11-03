@@ -8,6 +8,8 @@ import {
   CalendarDays,
   CheckCircle2,
   AlertCircle,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 
 const today = () => {
@@ -19,15 +21,8 @@ const today = () => {
 };
 
 const units = [
-  "kg",
-  "g",
-  "litre",
-  "ml",
-  "piece",
-  "packet",
-  "dozen",
-  "box",
-  "bottle",
+  "kg", "g", "litre", "ml", "piece",
+  "packet", "dozen", "box", "bottle",
 ];
 
 const inputClass =
@@ -44,14 +39,18 @@ export default function Purchases() {
   const [inventoryItemId, setInventoryItemId] = useState("");
   const [inventoryItems, setInventoryItems] = useState([]);
 
+  const [purchases, setPurchases] = useState([]);
   const [loadingItems, setLoadingItems] = useState(true);
+  const [loadingPurchases, setLoadingPurchases] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Load inventory items for the dropdown.
   useEffect(() => {
     fetchInventoryItems();
+    fetchPurchases();
   }, []);
 
   async function fetchInventoryItems() {
@@ -63,7 +62,7 @@ export default function Purchases() {
       .order("item_name");
 
     if (error) {
-      console.error("Inventory loading error:", error);
+      console.error(error);
       setErrorMessage("Could not load inventory items.");
     } else {
       setInventoryItems(data || []);
@@ -72,7 +71,26 @@ export default function Purchases() {
     setLoadingItems(false);
   }
 
-  // Select an existing inventory item.
+  async function fetchPurchases() {
+    setLoadingPurchases(true);
+
+    const { data, error } = await supabase
+      .from("purchases")
+      .select("*")
+      .order("purchase_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error(error);
+      setErrorMessage(error.message || "Could not load purchases.");
+    } else {
+      setPurchases(data || []);
+    }
+
+    setLoadingPurchases(false);
+  }
+
   function handleInventoryChange(id) {
     setInventoryItemId(id);
 
@@ -88,7 +106,6 @@ export default function Purchases() {
     }
   }
 
-  // Save purchase through one PostgreSQL transaction.
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -103,18 +120,12 @@ export default function Purchases() {
       return;
     }
 
-    if (
-      !Number.isFinite(numericQuantity) ||
-      numericQuantity <= 0
-    ) {
+    if (!Number.isFinite(numericQuantity) || numericQuantity <= 0) {
       setErrorMessage("Enter a valid quantity greater than zero.");
       return;
     }
 
-    if (
-      !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setErrorMessage("Enter a valid amount greater than zero.");
       return;
     }
@@ -137,7 +148,7 @@ export default function Purchases() {
     setSaving(false);
 
     if (error) {
-      console.error("Purchase saving error:", error);
+      console.error(error);
       setErrorMessage(error.message || "Could not save purchase.");
       return;
     }
@@ -148,7 +159,6 @@ export default function Purchases() {
         : "Purchase saved successfully!"
     );
 
-    // Reset form.
     setPurchaseDate(today());
     setItemName("");
     setQuantity("");
@@ -157,12 +167,74 @@ export default function Purchases() {
     setPaymentMethod("cash");
     setInventoryItemId("");
 
-    // Refresh inventory dropdown quantities.
-    fetchInventoryItems();
+    await Promise.all([
+      fetchInventoryItems(),
+      fetchPurchases(),
+    ]);
+  }
+
+  async function handleDelete(purchase) {
+    if (
+      purchase.payment_method === "credit" &&
+      purchase.credit_settled
+    ) {
+      setErrorMessage(
+        "Undo supplier settlement from the Credit page before deleting this purchase."
+      );
+      setMessage("");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Permanently delete this purchase?\n\n${purchase.item_name}\nQuantity: ${purchase.quantity} ${purchase.unit}\nAmount: ₹${Number(purchase.amount).toFixed(2)}\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingId(purchase.id);
+    setMessage("");
+    setErrorMessage("");
+
+    const { error } = await supabase.rpc(
+      "delete_purchase_with_inventory",
+      {
+        p_purchase_id: purchase.id,
+      }
+    );
+
+    if (error) {
+      console.error("Purchase deletion error:", error);
+      setErrorMessage(
+        error.message || "Could not delete purchase."
+      );
+    } else {
+      setMessage(
+        "Purchase permanently deleted successfully."
+      );
+
+      await Promise.all([
+        fetchPurchases(),
+        fetchInventoryItems(),
+      ]);
+    }
+
+    setDeletingId(null);
+  }
+
+  function formatDate(value) {
+    return new Date(`${value}T00:00:00`).toLocaleDateString(
+      "en-IN",
+      {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }
+    );
   }
 
   return (
     <div className="max-w-3xl mx-auto px-4 pt-5 pb-28">
+      {/* Heading */}
       <div className="mb-6">
         <div className="flex items-center gap-3">
           <div className="bg-[#173F35] text-white p-3 rounded-xl">
@@ -180,6 +252,7 @@ export default function Purchases() {
         </div>
       </div>
 
+      {/* Purchase Form */}
       <form
         onSubmit={handleSubmit}
         className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-5"
@@ -386,6 +459,127 @@ export default function Purchases() {
           {saving ? "Saving Purchase..." : "Save Purchase"}
         </button>
       </form>
+
+      {/* Recent Purchases */}
+      <section className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-800">
+              Recent Purchases
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Manage your last 50 purchase records.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              Promise.all([fetchPurchases(), fetchInventoryItems()])
+            }
+            disabled={loadingPurchases}
+            className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-600"
+            aria-label="Refresh purchases"
+          >
+            <RefreshCw
+              size={18}
+              className={loadingPurchases ? "animate-spin" : ""}
+            />
+          </button>
+        </div>
+
+        {loadingPurchases ? (
+          <div className="bg-white rounded-xl p-6 text-center text-gray-500">
+            Loading purchases...
+          </div>
+        ) : purchases.length === 0 ? (
+          <div className="bg-white rounded-xl p-6 text-center text-gray-500">
+            No purchases recorded yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {purchases.map((purchase) => {
+              const settled =
+                purchase.payment_method === "credit" &&
+                purchase.credit_settled;
+
+              return (
+                <div
+                  key={purchase.id}
+                  className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-gray-900">
+                        {purchase.item_name}
+                      </h4>
+
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatDate(purchase.purchase_date)}
+                      </p>
+
+                      <p className="text-sm text-gray-600 mt-2">
+                        {purchase.quantity} {purchase.unit}
+                      </p>
+
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <span className="text-xs capitalize bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">
+                          {purchase.payment_method}
+                        </span>
+
+                        {settled && (
+                          <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-lg">
+                            Settled
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-gray-900">
+                        ₹{Number(purchase.amount).toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(purchase)}
+                        disabled={
+                          settled || deletingId === purchase.id
+                        }
+                        title={
+                          settled
+                            ? "Undo supplier settlement first"
+                            : "Permanently delete purchase"
+                        }
+                        className="mt-3 p-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        {deletingId === purchase.id ? (
+                          <RefreshCw
+                            size={17}
+                            className="animate-spin"
+                          />
+                        ) : (
+                          <Trash2 size={17} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {settled && (
+                    <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2 mt-3">
+                      Undo supplier settlement from the Credit page
+                      before deleting this purchase.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
